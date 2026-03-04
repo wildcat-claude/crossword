@@ -1,0 +1,880 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline';">
+  <title>Crossword Puzzle</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: Helvetica, Arial, sans-serif;
+      background: #1a1a1a;
+      color: #fff;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Start Screen ── */
+    #start-screen {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+    }
+    .start-title    { font-size: 3.2rem; font-weight: bold; letter-spacing: 6px; margin-bottom: 10px; }
+    .start-subtitle { color: #888; font-size: 1rem; margin-bottom: 44px; }
+    .start-btn {
+      display: block; width: 220px; padding: 14px 0; margin: 8px;
+      font-size: 1.05rem; font-weight: bold; border: none; border-radius: 8px;
+      cursor: pointer; color: #fff; letter-spacing: 1px;
+      transition: transform .1s, opacity .15s;
+    }
+    .start-btn:hover  { opacity: .88; transform: scale(1.02); }
+    .start-btn:active { transform: scale(.98); }
+    .btn-easy   { background: #4caf50; }
+    .btn-medium { background: #2196f3; }
+    .btn-hard   { background: #f44336; }
+
+    /* ── Shared ── */
+    .hidden { display: none !important; }
+
+    /* ── Game Screen ── */
+    #game-screen { display: flex; flex-direction: column; height: 100vh; }
+
+    /* ── Toolbar ── */
+    #toolbar {
+      background: #2d2d2d; border-bottom: 1px solid #111;
+      padding: 0 10px; display: flex; align-items: center; gap: 6px;
+      flex-shrink: 0; height: 48px;
+    }
+    .tb-btn {
+      background: #444; color: #fff; border: none;
+      padding: 7px 13px; border-radius: 4px; cursor: pointer;
+      font-size: .88rem; font-weight: bold;
+    }
+    .tb-btn:hover { background: #5a5a5a; }
+    #tb-sep        { flex: 1; }
+    #diff-label    { color: #999; font-size: .85rem; margin-left: 4px; }
+    .diff-pill {
+      border: none; padding: 5px 13px; border-radius: 20px;
+      cursor: pointer; font-size: .78rem; font-weight: bold; color: #fff;
+    }
+    .diff-pill:hover { opacity: .85; }
+    .pill-easy   { background: #4caf50; }
+    .pill-medium { background: #2196f3; }
+    .pill-hard   { background: #f44336; }
+    #timer { font-size: 1rem; font-weight: bold; min-width: 48px; text-align: right; margin-left: 6px; }
+
+    /* ── Content ── */
+    #content { display: flex; flex: 1; overflow: hidden; }
+
+    /* ── Grid ── */
+    #grid-wrap {
+      flex: 1; display: flex; align-items: center; justify-content: center;
+      overflow: hidden; padding: 8px;
+    }
+    #grid {
+      display: inline-grid;
+      background: #1a1a1a;
+      border: 2px solid #444;
+    }
+    .cell {
+      position: relative; cursor: pointer; user-select: none;
+      border: 1px solid #ccc; background: #fff;
+    }
+    .cell.black-cell { background: #1a1a1a; cursor: default; border-color: #1a1a1a; }
+    .cell.sel        { background: #f5c518 !important; }
+    .cell.hi         { background: #b8d4f0; }
+    .cell.hi.rev     { background: #d4b8f0; }
+    .cell.hi.ok      { background: #a8e6a3; }
+    .cell.rev        { background: #d4b8f0; }
+    .cell.ok         { background: #a8e6a3; }
+    .cn { /* clue number */
+      position: absolute; top: 1px; left: 2px;
+      color: #333; line-height: 1; pointer-events: none;
+    }
+    .cl { /* cell letter */
+      position: absolute; top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      font-weight: bold; color: #000;
+      pointer-events: none; line-height: 1;
+    }
+    .cl.wrong { color: #cc0000; }
+    .cl.revl  { color: #5500aa; }
+
+    /* ── Clue Panel ── */
+    #clue-panel {
+      width: 260px; flex-shrink: 0; background: #f5f5f5; color: #222;
+      display: flex; flex-direction: column; overflow: hidden;
+      border-left: 1px solid #ddd;
+    }
+    .clue-section { display: flex; flex-direction: column; flex: 1; min-height: 0; overflow: hidden; }
+    .clue-hdr {
+      background: #e8e8e8; padding: 6px 10px;
+      font-weight: bold; font-size: .8rem; letter-spacing: 1px;
+      flex-shrink: 0; border-bottom: 1px solid #ccc;
+    }
+    .clue-div  { height: 2px; background: #ccc; flex-shrink: 0; }
+    .clue-list { overflow-y: auto; flex: 1; }
+    .clue-item {
+      padding: 5px 10px; font-size: .8rem; cursor: pointer;
+      line-height: 1.4; border-bottom: 1px solid #eee;
+    }
+    .clue-item:hover  { background: #e4e4e4; }
+    .clue-item.active { background: #4a90d9; color: #fff; }
+
+    /* ── Completion Dialog ── */
+    #dialog-overlay {
+      position: fixed; inset: 0; background: rgba(0,0,0,.65);
+      display: flex; align-items: center; justify-content: center; z-index: 999;
+    }
+    #dialog-box {
+      background: #2d2d2d; border-radius: 14px; padding: 44px 52px;
+      text-align: center; box-shadow: 0 8px 32px rgba(0,0,0,.4);
+    }
+    #dialog-box h2 { color: #4caf50; font-size: 1.9rem; margin-bottom: 10px; }
+    #dialog-box p  { color: #ccc; font-size: 1.05rem; margin-bottom: 30px; }
+    #dialog-box button {
+      background: #4caf50; color: #fff; border: none;
+      padding: 12px 30px; border-radius: 6px;
+      font-size: 1rem; font-weight: bold; cursor: pointer;
+    }
+    #dialog-box button:hover { opacity: .9; }
+  </style>
+</head>
+<body>
+
+<!-- ═══════════════ START SCREEN ═══════════════ -->
+<div id="start-screen">
+  <div class="start-title">CROSSWORD</div>
+  <div class="start-subtitle">Choose a difficulty to begin</div>
+  <button class="start-btn btn-easy"   onclick="startGame('Easy')">Easy</button>
+  <button class="start-btn btn-medium" onclick="startGame('Medium')">Medium</button>
+  <button class="start-btn btn-hard"   onclick="startGame('Hard')">Hard</button>
+</div>
+
+<!-- ═══════════════ GAME SCREEN ═══════════════ -->
+<div id="game-screen" class="hidden">
+  <div id="toolbar">
+    <button class="tb-btn" onclick="newPuzzle()">New Puzzle</button>
+    <button class="tb-btn" onclick="checkAnswers()">Check</button>
+    <button class="tb-btn" onclick="revealAnswers()">Reveal</button>
+    <span id="diff-label">Easy</span>
+    <div id="tb-sep"></div>
+    <button class="diff-pill pill-easy"   onclick="changeDifficulty('Easy')">Easy</button>
+    <button class="diff-pill pill-medium" onclick="changeDifficulty('Medium')">Medium</button>
+    <button class="diff-pill pill-hard"   onclick="changeDifficulty('Hard')">Hard</button>
+    <span id="timer">0:00</span>
+  </div>
+  <div id="content">
+    <div id="grid-wrap">
+      <div id="grid"></div>
+    </div>
+    <div id="clue-panel">
+      <div class="clue-section">
+        <div class="clue-hdr">ACROSS</div>
+        <div class="clue-list" id="across-list"></div>
+      </div>
+      <div class="clue-div"></div>
+      <div class="clue-section">
+        <div class="clue-hdr">DOWN</div>
+        <div class="clue-list" id="down-list"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>'use strict';
+
+// ══════════════════════════════════════════════════════════
+// CONSTANTS
+// ══════════════════════════════════════════════════════════
+const DIFFICULTY_SETTINGS = {
+  Easy:   { size: 9,  word_count: 12, min_len: 3, max_len: 5  },
+  Medium: { size: 13, word_count: 20, min_len: 4, max_len: 7  },
+  Hard:   { size: 15, word_count: 28, min_len: 5, max_len: 12 },
+};
+
+// ══════════════════════════════════════════════════════════
+// WORD BANKS
+// ══════════════════════════════════════════════════════════
+const WORD_BANKS = {
+Easy: [
+  ["CAT","Common household pet"],["DOG","Man's best friend"],["SUN","Star at center of our solar system"],
+  ["MAP","Navigation aid"],["CUP","Drinking vessel"],["HAT","Head covering"],
+  ["BAG","Carrying container"],["BUS","Public transport vehicle"],["FAN","Cooling device or enthusiast"],
+  ["JAM","Fruit preserve"],["LOG","Piece of cut wood"],["MOP","Floor cleaning tool"],
+  ["NET","Mesh used in sports"],["PAN","Flat cooking vessel"],["RUG","Floor covering"],
+  ["SAP","Tree fluid"],["TAB","Small flap or label"],["VAT","Large container"],
+  ["WAX","Candle material"],["ZAP","To strike with electricity"],["ACE","Top playing card"],
+  ["BED","Sleeping furniture"],["COT","Small portable bed"],["DEN","Small cozy room"],
+  ["EGG","Oval breakfast food"],["FIG","Sweet Mediterranean fruit"],["GEM","Precious stone"],
+  ["HEN","Female chicken"],["INK","Writing fluid"],["JET","Fast aircraft"],
+  ["KEG","Small barrel"],["LAP","Top of seated person's legs"],["MUD","Wet earth"],
+  ["NUT","Hard-shelled seed"],["OAK","Common hardwood tree"],["PEA","Small round green vegetable"],
+  ["ROW","Line of seats"],["SOB","Cry loudly"],["TAP","Faucet or light knock"],
+  ["URN","Decorative vase"],["VAN","Cargo vehicle"],["WIG","Artificial hair piece"],
+  ["YAK","Himalayan bovine"],["ZEN","Buddhist meditation tradition"],["ARM","Limb attached to shoulder"],
+  ["BOX","Rectangular container"],["CAP","Brimless hat"],["DIP","Brief immersion or sauce"],
+  ["ELM","Common shade tree"],["FLY","Winged insect"],["GUN","Weapon that fires projectiles"],
+  ["HOP","Small jump"],["IVY","Climbing plant"],["JAB","Quick punch"],
+  ["KIT","Set of tools"],["LIP","Edge of mouth"],["MAT","Small floor covering"],
+  ["NOD","Head movement of agreement"],["OWL","Nocturnal bird"],["PIT","Deep hole"],
+  ["RAT","Rodent"],["SAW","Cutting tool"],["TIP","End point or gratuity"],
+  ["VET","Animal doctor"],["WEB","Spider's creation"],["YEW","Evergreen tree"],
+  ["APE","Large primate"],["BEE","Honey-making insect"],["COW","Dairy farm animal"],
+  ["DIM","Not very bright"],["EEL","Snake-like fish"],["FOX","Clever canine"],
+  ["GAP","Opening or space"],["HUB","Center of a wheel"],["ICE","Frozen water"],
+  ["JOG","Slow run"],["KEY","Opens a lock"],["LEG","Limb for walking"],
+  ["MOB","Unruly crowd"],["NAP","Short sleep"],["ODD","Strange or not even"],
+  ["POD","Seed container"],["RIB","Chest bone"],["SUB","Submarine or substitute"],
+  ["TON","Unit of heavy weight"],["USE","Put to work"],["VIA","By way of"],
+  ["WOE","Great sorrow"],["YAM","Sweet orange root vegetable"],["ZAG","Turn in opposite direction"],
+  ["CAKE","Baked sweet dessert"],["BOAT","Small watercraft"],["CAVE","Underground hollow"],
+  ["DOVE","Peaceful bird"],["EDGE","Outer boundary"],["FACE","Front of the head"],
+  ["GAME","Activity with rules"],["HIVE","Bee colony home"],["IRON","Metal used for pressing clothes"],
+  ["JOKE","Something said for laughs"],
+],
+Medium: [
+  ["TIGER","Striped big cat"],["PRISM","Splits light into spectrum"],["FLAME","Fire's visible part"],
+  ["GROVE","Small group of trees"],["CRANE","Tall construction machine"],["BLEND","Mix together smoothly"],
+  ["CHEST","Torso or storage box"],["DRIFT","Move slowly without direction"],["ELDER","Older or senior person"],
+  ["FLOCK","Group of birds"],["GLOBE","Spherical world model"],["HATCH","Small door or plan secretly"],
+  ["INERT","Chemically inactive"],["JEWEL","Precious stone"],["KNACK","Special talent or skill"],
+  ["LUNAR","Relating to the moon"],["MAPLE","Tree that produces syrup"],["NERVE","Fiber that transmits signals"],
+  ["OPERA","Dramatic musical performance"],["PLUMB","Perfectly vertical"],["QUERY","A question"],
+  ["RAVEN","Large black bird"],["SWAMP","Marshy wetland"],["TORCH","Handheld light source"],
+  ["ULCER","Stomach sore"],["VENOM","Poisonous secretion"],["WALTZ","Three-beat ballroom dance"],
+  ["XYLEM","Plant water-transport tissue"],["YACHT","Luxury sailing vessel"],["ZEBRA","Black and white striped animal"],
+  ["AGILE","Able to move quickly"],["BEACH","Sandy shore"],["CLAMP","Device that holds things"],
+  ["DEPOT","Storage or transit hub"],["EPOCH","Period of history"],["FABLE","Short moral story"],
+  ["GAUZE","Light transparent fabric"],["HAVEN","Safe place"],["INDEX","Alphabetical reference list"],
+  ["JOUST","Medieval lance combat"],["KNELT","Past tense of kneel"],["LATCH","Door fastening"],
+  ["MANOR","Large country house"],["NINJA","Covert Japanese warrior"],["ONION","Layered vegetable that causes tears"],
+  ["PANEL","Flat section or group of experts"],["QUOTA","Required amount"],["RIDGE","Narrow raised strip"],
+  ["SCONE","British baked treat"],["TABOO","Culturally forbidden"],["USURP","Seize power illegally"],
+  ["VIGIL","Watchful waiting period"],["WHIRL","Spin rapidly"],["AXIOM","Self-evident truth"],
+  ["BRAWL","Rough fight"],["CALYX","Outer leaf of flower"],["DECOY","Lure to mislead"],
+  ["ENVOY","Diplomatic messenger"],["FJORD","Narrow coastal inlet"],["GLYPH","Carved symbol"],
+  ["HYDRA","Multi-headed mythical creature"],["ICHOR","Fluid in gods' veins"],["JUNTA","Military ruling group"],
+  ["KARMA","Cause and effect principle"],["LLAMA","South American pack animal"],["MAXIM","General truth or rule"],
+  ["NEXUS","Connection or link"],["OZONE","Atmospheric gas layer"],["PIVOT","Central turning point"],
+  ["QUAFF","Drink heartily"],["REALM","Kingdom or domain"],["SQUAB","Young pigeon"],
+  ["TRYST","Secret romantic meeting"],["UNIFY","Bring together as one"],["VAGUE","Not clearly defined"],
+  ["WRATH","Intense anger"],["ABBOT","Head of a monastery"],["BROTH","Thin soup or stock"],
+  ["CHASM","Deep crack in earth"],["DELTA","River mouth or Greek letter"],["EMBER","Glowing fire remains"],
+  ["FROND","Fern or palm leaf"],["GUILE","Clever deception"],["HELIX","Spiral shape like DNA"],
+  ["ICING","Sweet cake topping"],["JOKER","Comedian or wild card"],["LAPEL","Folded coat collar flap"],
+  ["MOOSE","Largest deer species"],["NYMPH","Minor nature goddess"],["OXIDE","Compound with oxygen"],
+  ["PIXEL","Smallest screen element"],["QUILL","Feather used as pen"],["RIVET","Metal fastening pin"],
+  ["SALVO","Simultaneous gunfire"],["TIDAL","Relating to ocean tides"],
+],
+Hard: [
+  ["EPHEMERAL","Lasting a very short time"],["LACONIC","Using very few words"],["QUIXOTIC","Unrealistically idealistic"],
+  ["SYCOPHANT","Flatterer who seeks favor"],["TENACIOUS","Holding firm despite resistance"],["UBIQUITOUS","Present everywhere at once"],
+  ["VORACIOUS","Consuming large amounts eagerly"],["WISTFUL","Longing with gentle sadness"],["ZEALOUS","Intensely enthusiastic"],
+  ["ABSTRUSE","Difficult to understand"],["BELLICOSE","Ready to argue or fight"],["CACOPHONY","Harsh discordant mixture of sounds"],
+  ["DIDACTIC","Intended to teach"],["EQUIVOCAL","Open to more than one interpretation"],["FASTIDIOUS","Very attentive to detail"],
+  ["GARRULOUS","Excessively talkative"],["HEGEMONY","Leadership or dominance"],["IMPETUOUS","Acting without thinking"],
+  ["JINGOISM","Extreme patriotism"],["KOWTOW","Act in obsequious manner"],["LOQUACIOUS","Tending to talk a great deal"],
+  ["NEFARIOUS","Wicked or criminal"],["OBDURATE","Stubbornly refusing to change"],["PERNICIOUS","Having harmful effect"],
+  ["QUERULOUS","Complaining in petulant way"],["SOLILOQUY","Speaking thoughts aloud alone"],["TRUCULENT","Eager to fight or argue"],
+  ["ACRIMONY","Bitterness or ill feeling"],["BENEVOLENT","Well meaning and kind"],["CIRCUMSPECT","Wary and unwilling to take risks"],
+  ["ENIGMATIC","Mysterious and difficult to understand"],["FORTUITOUS","Happening by lucky chance"],["HYPERBOLE","Exaggerated statement"],
+  ["INSCRUTABLE","Impossible to understand"],["JOCULAR","Fond of joking"],["LANGUID","Weak or lacking energy"],
+  ["MENDACIOUS","Not telling the truth"],["NASCENT","Just coming into existence"],["OBSEQUIOUS","Overly eager to serve"],
+  ["PARSIMONIOUS","Excessively frugal"],["RANCOROUS","Having bitter resentment"],["SAGACIOUS","Having good judgment"],
+  ["TACITURN","Habitually silent"],["UNCTUOUS","Excessively flattering"],["VACUOUS","Lacking intelligence"],
+  ["WINSOME","Attractive or appealing"],["ACUMEN","Ability to make good judgments"],["BRAZEN","Bold and without shame"],
+  ["COGENT","Clear and convincing"],["DEARTH","Scarcity or lack of something"],["ERSATZ","Made as inferior substitute"],
+  ["FURTIVE","Attempting to avoid notice"],["HUBRIS","Excessive pride or confidence"],["JARGON","Special words of a profession"],
+  ["KITSCH","Art considered tacky"],["LUCID","Clear and easy to understand"],["MYOPIC","Lacking imagination or foresight"],
+  ["NUANCE","Subtle difference in meaning"],["OBTUSE","Slow to understand"],["PEDANTIC","Overly concerned with detail"],
+  ["RAMPANT","Spreading unchecked"],["SCATHING","Witheringly critical"],["TERSE","Brief and to the point"],
+  ["UMBRAGE","Offense or annoyance"],["VAPID","Offering nothing stimulating"],["WANTON","Deliberate and unprovoked"],
+  ["ACERBIC","Sharp and forthright"],["BLITHE","Showing casual indifference"],["CALLOW","Inexperienced and immature"],
+  ["DIATRIBE","Forceful bitter criticism"],["ERUDITE","Having wide knowledge"],["FATUOUS","Silly and pointless"],
+  ["GERMANE","Relevant to the subject"],["HAPLESS","Unlucky"],["INIMICAL","Tending to obstruct or harm"],
+  ["KINETIC","Relating to motion"],["LISTLESS","Lacking energy or enthusiasm"],["MAUDLIN","Self-pityingly sentimental"],
+  ["NEBULOUS","In the form of a cloud"],["OFFICIOUS","Assertive of authority"],["PITHY","Concise and powerfully expressive"],
+  ["RIBALD","Coarsely vulgar"],["SARDONIC","Grimly mocking"],["TENUOUS","Very weak or slight"],
+  ["URBANE","Suave and confident"],["VERBOSE","Using more words than needed"],["WHIMSICAL","Playfully quaint or fanciful"],
+],
+};
+
+// ══════════════════════════════════════════════════════════
+// UTILITIES
+// ══════════════════════════════════════════════════════════
+function shuffle(arr) {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [arr[i], arr[j]] = [arr[j], arr[i]];
+  }
+  return arr;
+}
+function randInt(a, b) { return Math.floor(Math.random() * (b - a + 1)) + a; }
+
+// ══════════════════════════════════════════════════════════
+// CROSSWORD GENERATOR
+// ══════════════════════════════════════════════════════════
+class CrosswordGenerator {
+  constructor(difficulty) {
+    const cfg = DIFFICULTY_SETTINGS[difficulty];
+    this.size    = cfg.size;
+    this.minLen  = cfg.min_len;
+    this.maxLen  = cfg.max_len;
+    this.target  = cfg.word_count;
+    this.grid    = this._empty();
+    this.placed  = [];
+    const filtered = WORD_BANKS[difficulty].filter(([w]) => w.length >= this.minLen && w.length <= this.maxLen);
+    this.candidates = shuffle([...filtered, ...filtered, ...filtered]);
+  }
+
+  _empty() {
+    return Array.from({length: this.size}, () => Array(this.size).fill(null));
+  }
+
+  generate() {
+    let target = this.target;
+    for (let attempt = 0; attempt < 5; attempt++) {
+      this.grid   = this._empty();
+      this.placed = [];
+      this._attempt(target);
+      if (this.placed.length >= target * 0.6) break;
+      target = Math.max(6, target - 2);
+    }
+    this._assignNumbers();
+    return { placed: this.placed, grid: this.grid.map(r => [...r]) };
+  }
+
+  _attempt(target) {
+    const pool = shuffle([...this.candidates]);
+    const used = new Set();
+
+    // First word: horizontal, centered
+    for (const [word, clue] of pool) {
+      if (word.length <= this.size) {
+        const r = Math.floor(this.size / 2);
+        const c = Math.floor((this.size - word.length) / 2);
+        this._place(word, clue, r, c, 'A');
+        used.add(word);
+        break;
+      }
+    }
+    if (!this.placed.length) return;
+
+    for (const [word, clue] of shuffle(pool.filter(([w]) => !used.has(w)))) {
+      if (this.placed.length >= target) break;
+      if (used.has(word)) continue;
+      const best = this._findBest(word);
+      if (best) { this._place(word, clue, best.r, best.c, best.dir); used.add(word); }
+    }
+  }
+
+  _findBest(word) {
+    const cands = [];
+    for (const dir of ['A', 'D']) {
+      for (let r = 0; r < this.size; r++) {
+        for (let c = 0; c < this.size; c++) {
+          if (this._canPlace(word, r, c, dir)) {
+            cands.push({ score: this._score(word, r, c, dir), r, c, dir });
+          }
+        }
+      }
+    }
+    if (!cands.length) return null;
+    cands.sort((a, b) => b.score - a.score);
+    const top = cands.slice(0, Math.max(1, Math.floor(cands.length / 4)));
+    return top[randInt(0, top.length - 1)];
+  }
+
+  _canPlace(word, row, col, dir) {
+    const [dr, dc] = dir === 'A' ? [0, 1] : [1, 0];
+    const [pr, pc] = dir === 'A' ? [1, 0] : [0, 1];
+    const N = this.size, len = word.length;
+
+    const er = row + dr * (len - 1), ec = col + dc * (len - 1);
+    if (row < 0 || col < 0 || row >= N || col >= N) return false;
+    if (er  < 0 || ec  < 0 || er  >= N || ec  >= N) return false;
+
+    // Head / tail must be empty
+    const hr = row - dr, hc = col - dc;
+    if (hr >= 0 && hc >= 0 && hr < N && hc < N && this.grid[hr][hc] !== null) return false;
+    const tr = er + dr, tc = ec + dc;
+    if (tr >= 0 && tc >= 0 && tr < N && tc < N && this.grid[tr][tc] !== null) return false;
+
+    let hasX = false;
+    for (let i = 0; i < len; i++) {
+      const r = row + dr * i, c = col + dc * i;
+      const ex = this.grid[r][c];
+      if (ex !== null) {
+        if (ex !== word[i]) return false;
+        hasX = true;
+      } else {
+        for (const s of [-1, 1]) {
+          const nr = r + pr * s, nc = c + pc * s;
+          if (nr >= 0 && nc >= 0 && nr < N && nc < N && this.grid[nr][nc] !== null) return false;
+        }
+      }
+    }
+    if (this.placed.length > 0 && !hasX) return false;
+    return true;
+  }
+
+  _score(word, row, col, dir) {
+    const [dr, dc] = dir === 'A' ? [0, 1] : [1, 0];
+    let x = 0, ep = 0;
+    for (let i = 0; i < word.length; i++) {
+      const r = row + dr * i, c = col + dc * i;
+      if (this.grid[r][c] !== null) x++;
+      const d = Math.min(r, this.size - 1 - r, c, this.size - 1 - c);
+      if (d === 0) ep += 3; else if (d === 1) ep += 1;
+    }
+    return x * 10 - ep + randInt(0, 3);
+  }
+
+  _place(word, clue, row, col, dir) {
+    const [dr, dc] = dir === 'A' ? [0, 1] : [1, 0];
+    for (let i = 0; i < word.length; i++) this.grid[row + dr * i][col + dc * i] = word[i];
+    this.placed.push({ word, clue, row, col, dir, number: 0 });
+  }
+
+  _assignNumbers() {
+    const starts = new Map();
+    let num = 1;
+    for (let r = 0; r < this.size; r++) {
+      for (let c = 0; c < this.size; c++) {
+        if (this.grid[r][c] === null) continue;
+        if (this.placed.some(pw => pw.row === r && pw.col === c)) {
+          const k = `${r},${c}`;
+          if (!starts.has(k)) starts.set(k, num++);
+        }
+      }
+    }
+    for (const pw of this.placed) pw.number = starts.get(`${pw.row},${pw.col}`) || 0;
+    this.placed.sort((a, b) => a.number - b.number || (a.dir === 'A' ? 0 : 1) - (b.dir === 'A' ? 0 : 1));
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// GAME STATE
+// ══════════════════════════════════════════════════════════
+const G = {
+  difficulty: 'Easy',
+  placedWords: [], solution: [], cells: [],
+  gridSize: 9,
+  selRow: -1, selCol: -1, dir: 'A',
+  activeWord: null,
+  startTime: 0, elapsedStopped: null, timerInterval: null,
+  acrossWords: [], downWords: [],
+  cellSize: 40,
+};
+
+function resetCells() {
+  G.cells = Array.from({length: G.gridSize}, () =>
+    Array.from({length: G.gridSize}, () => ({ letter: '', checked: false, correct: false, revealed: false }))
+  );
+}
+
+// ══════════════════════════════════════════════════════════
+// GAME CONTROL
+// ══════════════════════════════════════════════════════════
+function startGame(diff) {
+  G.difficulty = diff;
+  document.getElementById('start-screen').classList.add('hidden');
+  document.getElementById('game-screen').classList.remove('hidden');
+  document.getElementById('diff-label').textContent = diff;
+  _runAndRender();
+  startTimer();
+}
+
+function newPuzzle() {
+  stopTimer();
+  _runAndRender();
+  startTimer();
+}
+
+function changeDifficulty(diff) {
+  G.difficulty = diff;
+  document.getElementById('diff-label').textContent = diff;
+  stopTimer();
+  _runAndRender();
+  startTimer();
+}
+
+function _runAndRender() {
+  _runGenerator();
+  buildGrid();
+  renderClues();
+  renderGrid();
+  syncCluePanel();
+}
+
+function _runGenerator() {
+  G.gridSize = DIFFICULTY_SETTINGS[G.difficulty].size;
+  const { placed, grid } = new CrosswordGenerator(G.difficulty).generate();
+  G.placedWords = placed;
+  G.solution    = grid;
+  resetCells();
+  if (placed.length) {
+    const f = placed[0];
+    G.selRow = f.row; G.selCol = f.col; G.dir = f.dir; G.activeWord = f;
+  } else {
+    G.selRow = 0; G.selCol = 0; G.dir = 'A'; G.activeWord = null;
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// GRID BUILD & RENDER
+// ══════════════════════════════════════════════════════════
+function getCellSize() {
+  const wrap = document.getElementById('grid-wrap');
+  let w = wrap.clientWidth, h = wrap.clientHeight;
+  if (!w || !h) { w = window.innerWidth * 0.7; h = window.innerHeight - 60; }
+  return Math.max(28, Math.min(Math.floor((w - 16) / G.gridSize), Math.floor((h - 16) / G.gridSize), 64));
+}
+
+function buildGrid() {
+  const el = document.getElementById('grid');
+  const cs = getCellSize();
+  G.cellSize = cs;
+  el.style.gridTemplateColumns = `repeat(${G.gridSize}, ${cs}px)`;
+  el.style.gridTemplateRows    = `repeat(${G.gridSize}, ${cs}px)`;
+
+  const nfs = Math.max(7,  Math.floor(cs * 0.22));
+  const lfs = Math.max(10, Math.floor(cs * 0.52));
+
+  let html = '';
+  for (let r = 0; r < G.gridSize; r++) {
+    for (let c = 0; c < G.gridSize; c++) {
+      html += `<div class="cell" data-r="${r}" data-c="${c}" style="width:${cs}px;height:${cs}px">` +
+              `<span class="cn" style="font-size:${nfs}px"></span>` +
+              `<span class="cl" style="font-size:${lfs}px"></span>` +
+              `</div>`;
+    }
+  }
+  el.innerHTML = html;
+}
+
+function renderGrid() {
+  const el = document.getElementById('grid');
+  const cellEls = el.querySelectorAll('.cell');
+  if (!cellEls.length) return;
+
+  // Active word cell set
+  const hiSet = new Set();
+  if (G.activeWord) {
+    const aw = G.activeWord;
+    const [dr, dc] = aw.dir === 'A' ? [0,1] : [1,0];
+    for (let i = 0; i < aw.word.length; i++) hiSet.add(`${aw.row + dr*i},${aw.col + dc*i}`);
+  }
+
+  // Number lookup
+  const numAt = {};
+  for (const pw of G.placedWords) { const k = `${pw.row},${pw.col}`; if (!numAt[k]) numAt[k] = pw.number; }
+
+  let idx = 0;
+  for (let r = 0; r < G.gridSize; r++) {
+    for (let c = 0; c < G.gridSize; c++) {
+      const div = cellEls[idx++];
+      const sol = G.solution[r]?.[c];
+      const cn  = div.querySelector('.cn');
+      const cl  = div.querySelector('.cl');
+
+      if (sol === null) {
+        div.className = 'cell black-cell';
+        cn.textContent = ''; cl.textContent = ''; cl.className = 'cl';
+        continue;
+      }
+
+      const cell = G.cells[r][c];
+      const key  = `${r},${c}`;
+      const isSel = r === G.selRow && c === G.selCol;
+      const isHi  = hiSet.has(key);
+
+      let cls = 'cell';
+      if (isSel) {
+        cls += ' sel';
+      } else if (isHi) {
+        cls += ' hi';
+        if (cell.revealed)              cls += ' rev';
+        else if (cell.checked && cell.correct) cls += ' ok';
+      } else if (cell.revealed) {
+        cls += ' rev';
+      } else if (cell.checked && cell.correct) {
+        cls += ' ok';
+      }
+      div.className = cls;
+
+      cn.textContent = numAt[key] || '';
+
+      cl.textContent = cell.letter;
+      cl.className = 'cl';
+      if (cell.letter) {
+        if (cell.revealed)             cl.className += ' revl';
+        else if (cell.checked && !cell.correct) cl.className += ' wrong';
+      }
+    }
+  }
+}
+
+// ══════════════════════════════════════════════════════════
+// CLUE PANEL
+// ══════════════════════════════════════════════════════════
+function renderClues() {
+  G.acrossWords = G.placedWords.filter(p => p.dir === 'A').sort((a,b) => a.number - b.number);
+  G.downWords   = G.placedWords.filter(p => p.dir === 'D').sort((a,b) => a.number - b.number);
+
+  document.getElementById('across-list').innerHTML =
+    G.acrossWords.map((pw, i) => `<div class="clue-item" data-dir="A" data-idx="${i}">${pw.number}. ${pw.clue}</div>`).join('');
+  document.getElementById('down-list').innerHTML =
+    G.downWords.map((pw, i) => `<div class="clue-item" data-dir="D" data-idx="${i}">${pw.number}. ${pw.clue}</div>`).join('');
+}
+
+function syncCluePanel() {
+  document.querySelectorAll('.clue-item').forEach(el => el.classList.remove('active'));
+  if (!G.activeWord) return;
+  const list = G.activeWord.dir === 'A' ? G.acrossWords : G.downWords;
+  const idx  = list.indexOf(G.activeWord);
+  if (idx < 0) return;
+  const listEl = document.getElementById(G.activeWord.dir === 'A' ? 'across-list' : 'down-list');
+  const item   = listEl?.querySelectorAll('.clue-item')[idx];
+  if (item) { item.classList.add('active'); item.scrollIntoView({ block: 'nearest' }); }
+}
+
+// ══════════════════════════════════════════════════════════
+// EVENTS — set up once via delegation
+// ══════════════════════════════════════════════════════════
+document.getElementById('grid').addEventListener('click', e => {
+  const cell = e.target.closest('[data-r]');
+  if (!cell) return;
+  onCellClick(+cell.dataset.r, +cell.dataset.c);
+});
+
+document.getElementById('across-list').addEventListener('click', e => {
+  const item = e.target.closest('.clue-item');
+  if (!item) return;
+  selectWord(G.acrossWords[+item.dataset.idx]);
+});
+
+document.getElementById('down-list').addEventListener('click', e => {
+  const item = e.target.closest('.clue-item');
+  if (!item) return;
+  selectWord(G.downWords[+item.dataset.idx]);
+});
+
+document.addEventListener('keydown', e => {
+  if (!G.solution.length) return;
+  const tag = document.activeElement?.tagName;
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+
+  if (e.key === 'Tab') {
+    e.preventDefault(); cycleWord(!e.shiftKey); return;
+  }
+  if (e.key === 'Backspace') { e.preventDefault(); handleBackspace(); return; }
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) {
+    e.preventDefault(); handleArrow(e.key); return;
+  }
+  if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) { handleLetter(e.key.toUpperCase()); return; }
+});
+
+window.addEventListener('resize', () => {
+  if (!G.solution.length) return;
+  const cs = getCellSize();
+  if (Math.abs(cs - G.cellSize) < 2) return;
+  G.cellSize = cs;
+  const el = document.getElementById('grid');
+  el.style.gridTemplateColumns = `repeat(${G.gridSize}, ${cs}px)`;
+  el.style.gridTemplateRows    = `repeat(${G.gridSize}, ${cs}px)`;
+  const nfs = Math.max(7,  Math.floor(cs * 0.22));
+  const lfs = Math.max(10, Math.floor(cs * 0.52));
+  el.querySelectorAll('.cell').forEach(d => {
+    d.style.width = `${cs}px`; d.style.height = `${cs}px`;
+    const cn = d.querySelector('.cn'); if (cn) cn.style.fontSize = `${nfs}px`;
+    const cl = d.querySelector('.cl'); if (cl) cl.style.fontSize = `${lfs}px`;
+  });
+});
+
+// ══════════════════════════════════════════════════════════
+// NAVIGATION
+// ══════════════════════════════════════════════════════════
+function handleLetter(letter) {
+  const { selRow: r, selCol: c } = G;
+  if (r < 0 || G.solution[r]?.[c] === null) return;
+  const cell = G.cells[r][c];
+  if (!cell.revealed) { cell.letter = letter; cell.checked = false; cell.correct = false; }
+  advanceCursor();
+  renderGrid();
+  checkCompletion();
+}
+
+function handleBackspace() {
+  const { selRow: r, selCol: c } = G;
+  if (r < 0) return;
+  const cell = G.cells[r][c];
+  if (cell.letter && !cell.revealed) {
+    cell.letter = ''; cell.checked = false; cell.correct = false;
+  } else {
+    retreatCursor();
+    const cell2 = G.cells[G.selRow]?.[G.selCol];
+    if (cell2 && !cell2.revealed) { cell2.letter = ''; cell2.checked = false; cell2.correct = false; }
+  }
+  renderGrid();
+}
+
+function handleArrow(key) {
+  const map = { ArrowLeft:[0,-1,'A'], ArrowRight:[0,1,'A'], ArrowUp:[-1,0,'D'], ArrowDown:[1,0,'D'] };
+  const [dr, dc, adir] = map[key];
+  if (G.dir === adir) { moveCursor(dr, dc); }
+  else { G.dir = adir; updateActiveWord(); syncCluePanel(); renderGrid(); }
+}
+
+function advanceCursor() {
+  const [dr, dc] = G.dir === 'A' ? [0,1] : [1,0];
+  const r = G.selRow + dr, c = G.selCol + dc;
+  if (r >= 0 && c >= 0 && r < G.gridSize && c < G.gridSize && G.solution[r][c] !== null) {
+    G.selRow = r; G.selCol = c; updateActiveWord(); syncCluePanel();
+  }
+}
+
+function retreatCursor() {
+  const [dr, dc] = G.dir === 'A' ? [0,1] : [1,0];
+  const r = G.selRow - dr, c = G.selCol - dc;
+  if (r >= 0 && c >= 0 && r < G.gridSize && c < G.gridSize && G.solution[r][c] !== null) {
+    G.selRow = r; G.selCol = c; updateActiveWord(); syncCluePanel();
+  }
+}
+
+function moveCursor(dr, dc) {
+  let r = G.selRow + dr, c = G.selCol + dc;
+  while (r >= 0 && c >= 0 && r < G.gridSize && c < G.gridSize) {
+    if (G.solution[r][c] !== null) {
+      G.selRow = r; G.selCol = c; updateActiveWord(); syncCluePanel(); renderGrid(); return;
+    }
+    r += dr; c += dc;
+  }
+}
+
+function cycleWord(forward) {
+  if (!G.placedWords.length) return;
+  const sorted = [...G.placedWords].sort((a,b) => a.number - b.number || (a.dir === 'A' ? 0 : 1) - (b.dir === 'A' ? 0 : 1));
+  let idx = G.activeWord ? sorted.indexOf(G.activeWord) : 0;
+  idx = (idx + (forward ? 1 : -1) + sorted.length) % sorted.length;
+  selectWord(sorted[idx]);
+}
+
+function onCellClick(r, c) {
+  if (G.solution[r]?.[c] === null) return;
+  if (r === G.selRow && c === G.selCol) {
+    const nd = G.dir === 'A' ? 'D' : 'A';
+    if (findWordAt(r, c, nd)) G.dir = nd;
+  } else {
+    G.selRow = r; G.selCol = c;
+    if (!findWordAt(r, c, G.dir)) {
+      const alt = G.dir === 'A' ? 'D' : 'A';
+      if (findWordAt(r, c, alt)) G.dir = alt;
+    }
+  }
+  updateActiveWord(); syncCluePanel(); renderGrid();
+}
+
+function selectWord(pw) {
+  if (!pw) return;
+  G.selRow = pw.row; G.selCol = pw.col; G.dir = pw.dir; G.activeWord = pw;
+  syncCluePanel(); renderGrid();
+}
+
+function findWordAt(r, c, dir) {
+  const [dr, dc] = dir === 'A' ? [0,1] : [1,0];
+  for (const pw of G.placedWords) {
+    if (pw.dir !== dir) continue;
+    for (let i = 0; i < pw.word.length; i++) {
+      if (pw.row + dr*i === r && pw.col + dc*i === c) return pw;
+    }
+  }
+  return null;
+}
+
+function updateActiveWord() {
+  let found = findWordAt(G.selRow, G.selCol, G.dir);
+  if (found) { G.activeWord = found; return; }
+  const alt = G.dir === 'A' ? 'D' : 'A';
+  found = findWordAt(G.selRow, G.selCol, alt);
+  if (found) { G.activeWord = found; G.dir = alt; return; }
+  G.activeWord = null;
+}
+
+// ══════════════════════════════════════════════════════════
+// GAME ACTIONS
+// ══════════════════════════════════════════════════════════
+function checkAnswers() {
+  for (let r = 0; r < G.gridSize; r++) {
+    for (let c = 0; c < G.gridSize; c++) {
+      if (G.solution[r][c] === null) continue;
+      const cell = G.cells[r][c];
+      if (cell.letter && !cell.revealed) { cell.checked = true; cell.correct = cell.letter === G.solution[r][c]; }
+    }
+  }
+  renderGrid();
+}
+
+function revealAnswers() {
+  for (let r = 0; r < G.gridSize; r++) {
+    for (let c = 0; c < G.gridSize; c++) {
+      if (G.solution[r][c] === null) continue;
+      const cell = G.cells[r][c];
+      cell.letter = G.solution[r][c]; cell.revealed = true; cell.checked = false; cell.correct = false;
+    }
+  }
+  stopTimer(); renderGrid();
+}
+
+function checkCompletion() {
+  for (let r = 0; r < G.gridSize; r++) {
+    for (let c = 0; c < G.gridSize; c++) {
+      if (G.solution[r][c] === null) continue;
+      if (G.cells[r][c].letter !== G.solution[r][c]) return;
+    }
+  }
+  stopTimer();
+  const e = G.elapsedStopped ?? (Date.now() / 1000 - G.startTime);
+  const m = Math.floor(e / 60), s = Math.floor(e % 60);
+  const ov = document.createElement('div');
+  ov.id = 'dialog-overlay';
+  ov.innerHTML = `<div id="dialog-box">
+    <h2>Puzzle Complete!</h2>
+    <p>Time: ${m}:${s.toString().padStart(2,'0')}</p>
+    <button onclick="this.closest('#dialog-overlay').remove();newPuzzle();">New Puzzle</button>
+  </div>`;
+  document.body.appendChild(ov);
+}
+
+// ══════════════════════════════════════════════════════════
+// TIMER
+// ══════════════════════════════════════════════════════════
+function startTimer() {
+  G.startTime = Date.now() / 1000; G.elapsedStopped = null;
+  clearInterval(G.timerInterval);
+  G.timerInterval = setInterval(tickTimer, 1000);
+  tickTimer();
+}
+function stopTimer() {
+  clearInterval(G.timerInterval); G.timerInterval = null;
+  if (G.elapsedStopped === null) G.elapsedStopped = Date.now() / 1000 - G.startTime;
+}
+function tickTimer() {
+  if (G.elapsedStopped !== null) return;
+  const e = Date.now() / 1000 - G.startTime;
+  const m = Math.floor(e / 60), s = Math.floor(e % 60);
+  const el = document.getElementById('timer');
+  if (el) el.textContent = `${m}:${s.toString().padStart(2,'0')}`;
+}
+</script>
+</body>
+</html>
