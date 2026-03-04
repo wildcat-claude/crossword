@@ -146,6 +146,59 @@
       font-size: 1rem; font-weight: bold; cursor: pointer;
     }
     #dialog-box button:hover { opacity: .9; }
+
+    /* ── Clue Tabs (mobile only) ── */
+    #clue-tabs {
+      display: none;
+      flex-shrink: 0;
+    }
+    .clue-tab {
+      flex: 1; padding: 9px 4px; border: none; cursor: pointer;
+      font-weight: bold; font-size: .8rem; letter-spacing: 1px;
+      background: #e0e0e0; color: #444;
+      border-bottom: 3px solid transparent;
+    }
+    .clue-tab.active { background: #fff; color: #4a90d9; border-bottom-color: #4a90d9; }
+
+    /* ── Responsive / Mobile ── */
+    @media (max-width: 640px) {
+      /* Toolbar scrolls horizontally */
+      #toolbar { overflow-x: auto; gap: 4px; padding: 0 6px; -webkit-overflow-scrolling: touch; }
+      #toolbar::-webkit-scrollbar { display: none; }
+      .tb-btn  { padding: 6px 10px; font-size: .8rem; flex-shrink: 0; }
+      .diff-pill { padding: 4px 10px; font-size: .72rem; flex-shrink: 0; }
+      #diff-label { display: none; }
+
+      /* Stack grid above clues */
+      #content { flex-direction: column; }
+
+      /* Grid fills full width, doesn't expand past its natural size */
+      #grid-wrap { flex: 0 0 auto; padding: 4px; }
+
+      /* Clue panel goes below grid */
+      #clue-panel {
+        width: 100%; border-left: none; border-top: 2px solid #ccc;
+        flex-direction: column; flex: 1; min-height: 180px;
+      }
+
+      /* Show tabs on mobile */
+      #clue-tabs { display: flex; }
+
+      /* Each section fills the whole panel when active */
+      .clue-section { display: none; }
+      .clue-section.tab-active { display: flex; }
+
+      /* Hide desktop divider */
+      .clue-div { display: none; }
+
+      /* Bigger touch targets for clue items */
+      .clue-item { padding: 9px 12px; font-size: .85rem; }
+    }
+
+    @media (min-width: 641px) {
+      /* Desktop: always show both sections */
+      .clue-section { display: flex; }
+    }
   </style>
 </head>
 <body>
@@ -177,18 +230,27 @@
       <div id="grid"></div>
     </div>
     <div id="clue-panel">
-      <div class="clue-section">
+      <div id="clue-tabs">
+        <button class="clue-tab tab-active" id="tab-A" onclick="showClueTab('A')">ACROSS</button>
+        <button class="clue-tab"            id="tab-D" onclick="showClueTab('D')">DOWN</button>
+      </div>
+      <div class="clue-section tab-active" id="section-A">
         <div class="clue-hdr">ACROSS</div>
         <div class="clue-list" id="across-list"></div>
       </div>
       <div class="clue-div"></div>
-      <div class="clue-section">
+      <div class="clue-section" id="section-D">
         <div class="clue-hdr">DOWN</div>
         <div class="clue-list" id="down-list"></div>
       </div>
     </div>
   </div>
 </div>
+
+<!-- Hidden input to capture mobile keyboard -->
+<input id="kb" type="text"
+  style="position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0;pointer-events:none;"
+  autocomplete="off" autocorrect="off" autocapitalize="characters" spellcheck="false" inputmode="text">
 
 <script>'use strict';
 
@@ -1865,9 +1927,14 @@ function _runGenerator() {
 // ══════════════════════════════════════════════════════════
 function getCellSize() {
   const wrap = document.getElementById('grid-wrap');
-  let w = wrap.clientWidth, h = wrap.clientHeight;
-  if (!w || !h) { w = window.innerWidth * 0.7; h = window.innerHeight - 60; }
-  return Math.max(28, Math.min(Math.floor((w - 16) / G.gridSize), Math.floor((h - 16) / G.gridSize), 64));
+  const mobile = window.innerWidth <= 640;
+  let w = wrap.clientWidth  || (mobile ? window.innerWidth       : window.innerWidth * 0.68);
+  let h = wrap.clientHeight || (mobile ? window.innerHeight * 0.52 : window.innerHeight - 60);
+  if (mobile) {
+    // On mobile, clue panel sits below — only use width to size cells
+    h = w; // allow square grid that fits full width
+  }
+  return Math.max(28, Math.min(Math.floor((w - 8) / G.gridSize), Math.floor((h - 8) / G.gridSize), 64));
 }
 
 function buildGrid() {
@@ -1970,12 +2037,21 @@ function renderClues() {
 function syncCluePanel() {
   document.querySelectorAll('.clue-item').forEach(el => el.classList.remove('active'));
   if (!G.activeWord) return;
+  // On mobile, switch to the tab matching active word's direction
+  if (window.innerWidth <= 640) showClueTab(G.activeWord.dir);
   const list = G.activeWord.dir === 'A' ? G.acrossWords : G.downWords;
   const idx  = list.indexOf(G.activeWord);
   if (idx < 0) return;
   const listEl = document.getElementById(G.activeWord.dir === 'A' ? 'across-list' : 'down-list');
   const item   = listEl?.querySelectorAll('.clue-item')[idx];
   if (item) { item.classList.add('active'); item.scrollIntoView({ block: 'nearest' }); }
+}
+
+function showClueTab(dir) {
+  ['A', 'D'].forEach(d => {
+    document.getElementById(`section-${d}`).classList.toggle('tab-active', d === dir);
+    document.getElementById(`tab-${d}`).classList.toggle('tab-active', d === dir);
+  });
 }
 
 // ══════════════════════════════════════════════════════════
@@ -2112,6 +2188,7 @@ function onCellClick(r, c) {
     }
   }
   updateActiveWord(); syncCluePanel(); renderGrid();
+  focusMobileKb();
 }
 
 function selectWord(pw) {
@@ -2205,6 +2282,30 @@ function tickTimer() {
   const el = document.getElementById('timer');
   if (el) el.textContent = `${m}:${s.toString().padStart(2,'0')}`;
 }
+
+// ══════════════════════════════════════════════════════════
+// MOBILE KEYBOARD
+// ══════════════════════════════════════════════════════════
+const _kb = document.getElementById('kb');
+
+function focusMobileKb() {
+  if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+    _kb.value = '';
+    _kb.focus();
+  }
+}
+
+_kb.addEventListener('input', () => {
+  const val = _kb.value.replace(/[^a-zA-Z]/g, '').toUpperCase();
+  _kb.value = '';
+  if (val) handleLetter(val[val.length - 1]);
+});
+
+_kb.addEventListener('keydown', e => {
+  if (e.key === 'Backspace')                                    { e.preventDefault(); handleBackspace(); }
+  if (['ArrowLeft','ArrowRight','ArrowUp','ArrowDown'].includes(e.key)) { e.preventDefault(); handleArrow(e.key); }
+  if (e.key === 'Tab')                                          { e.preventDefault(); cycleWord(!e.shiftKey); }
+});
 </script>
 </body>
 </html>
